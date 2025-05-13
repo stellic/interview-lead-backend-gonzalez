@@ -10,8 +10,6 @@ from api.models import Person, Event
 
 def check_conflict(instructor_id, student_id, epoch_start, epoch_end):
     with connection.cursor() as cursor:
-        # if there is no student or instructor, then I guess there are no conflicts; leave it to the server to
-        # have a more coherent response
         # ick...not very elegant or easily exentisble.  refactor.
         if (student_id is not None and student_id.strip() != "" and student_id != "none") and \
            (instructor_id is not None and instructor_id.strip() != "" or instructor_id != "none"):
@@ -21,6 +19,8 @@ def check_conflict(instructor_id, student_id, epoch_start, epoch_end):
         elif (instructor_id is None or instructor_id.strip() == "" or instructor_id == "none"):
             cursor.execute("select count(*) as cnt from event where (GREATEST(epoch_start, %s) < LEAST(epoch_end, %s)) and student_id=%s", [int(epoch_start), int(epoch_end), student_id])
         else:
+            # if there is no student or instructor, then I guess there are no conflicts; leave it to the server to
+            # have a more coherent response
             return 0 
 
         return cursor.fetchone()[0]
@@ -58,7 +58,7 @@ def insert_event(request, instructor_id, student_id, start, end, name):
     start_date  = parser.isoparse(start)
     end_date    = parser.isoparse(end)
 
-    # convert these into epoch seconds
+    # convert these into epoch seconds; default converts to utc before converting to seconds since epoch
     epoch_start = start_date.timestamp()
     epoch_end   = end_date.timestamp()
 
