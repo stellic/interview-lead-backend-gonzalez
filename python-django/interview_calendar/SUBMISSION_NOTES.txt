@@ -174,3 +174,7 @@ Vary: origin
 
 
 
+
+and lastly, to check the users in the db:
+(.virtualenv) ubuntu@stelliccodetest:~/stellic/placeholder/python-django/interview_calendar/api$ curl 0.0.0.0:8000/api/users/    # <---- need trailing slash
+[{"person_id": "S123456789012345", "name": "Fish, Amber"}, {"person_id": "S000000000000001", "name": "Bird, Jack"}, {"person_id": "I000000000000002", "name": "Fox, Allison"}]

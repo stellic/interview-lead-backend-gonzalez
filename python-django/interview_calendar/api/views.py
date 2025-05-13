@@ -32,9 +32,9 @@ def get_users(request):
     persons = Person.objects.all()
     return JsonResponse(
         [
-
+            {"person_id":person.person_id, "name": f"{person.last_name}, {person.first_name}"} for person in persons
         ],
-        safe=False
+        status=200, safe=False
     )
 
 def get_events(request, user_id):
