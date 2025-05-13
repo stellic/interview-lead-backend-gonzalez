@@ -1,0 +1,176 @@
+Thank you for taking the time to look over my submission for the calendar project!
+
+A few notes:
+1) Wasn't able to get the codespace working on my mac (likely a local firewalling or /etc/hosts issue)
+2) I overlooked the docker content in .devcontainer, so I ended up installing a local postgres and running directly into a virtual env
+3) I was able to get everything working, though, so the provided code was great to get things started
+
+A few assumptions/design decisions:
+1) I considered using separate tables for instructors or students, but opted to unify them into "persons", since it simplified some of the coding
+2) similarly, I opted to generalize classes and meetings and other elements that could take up space in a schedule into a single entity "Event" as a simplifying assumption
+3) student and instructor id's are strings with a maximum of 16 characters (sorry, that was decision that I realize now came from my time working with the congressional roll-call legislation database);
+  3a) instructors are prefaced with "I" followed by 15 characters (ideally numbers, but it's up to you); similarly students are prefaced with 'S'
+4) I opted to communicate the server's response to the request via http codes; this is the back end and unless there's something extraordinary happening (server crashes), then the terse reply seems workable
+
+
+Deployment:
+1) I wanted to maintain the softest touch possible on the codebase in an effort to keep you, the grader, from having to struggle too much.  You'll need to adjust the settings in the settings.py file which point to localhost (as opposed to the "db" container it should have been pointing to had I explored the codebase a little more fully--that's on me).  Once you've hooked up the database, *should* just be able to migrate the new tables into the database.
+2) I'm not including the migrations (though I can if requested)
+3) once the database settings are ready, you should just be able to run it as you normally would via manage.py with or external to a docker
+
+Validation:
+The database starts empty.  persons are currently very simple:
+> insert into "person" values ('I000000000000002', 'Allison', 'Fox');
+> insert into "person" values ('S000000000000001', 'Jack', 'Bird');
+> insert into "person" values ('S123456789012345', 'Amber', 'Fish');
+
+
+the api is...suboptimal, but this is what I came up with in the time I had:
+api/event/create/<OPTIONAL_INSTRUCTOR_ID>/<OPTIONAL_STUDENT_ID>/<TIMEZONE_AWARE_START>/<TIMEZONE_AWARE_END>/<URL_ENCODED_NAME>
+
+if you are creating an event that only has a student (attending class) or an instructor (teaching class, etc) you can substitute "none" for an id.  If both are none, the server just complains:
+(.virtualenv) ubuntu@stelliccodetest:~/stellic/placeholder/python-django/interview_calendar/api$ curl -I 0.0.0.0:8000/api/event/create/none/none/2025-05-12T17:42:52.52-04:00/2025-05-12T18:42:53.52-04:00/adconference%20call
+HTTP/1.1 400 Bad Request
+Date: Tue, 13 May 2025 01:36:24 GMT
+Server: WSGIServer/0.2 CPython/3.12.3
+Content-Type: application/json
+X-Frame-Options: DENY
+Content-Length: 2
+X-Content-Type-Options: nosniff
+Referrer-Policy: same-origin
+Cross-Origin-Opener-Policy: same-origin
+Vary: origin
+
+
+
+starting with an empty database:
+
+(.virtualenv) ubuntu@stelliccodetest:~/stellic/placeholder/python-django/interview_calendar/api$ curl 0.0.0.0:8000/api/event/I000000000000002 ; echo ""
+[]
+
+(.virtualenv) ubuntu@stelliccodetest:~/stellic/placeholder/python-django/interview_calendar/api$ curl 0.0.0.0:8000/api/event/S000000000000001 ; echo ""
+[]
+
+you can add single events
+
+(.virtualenv) ubuntu@stelliccodetest:~/stellic/placeholder/python-django/interview_calendar/api$ curl -I 0.0.0.0:8000/api/event/create/I000000000000002/none/2025-05-12T17:12:52.52-04:00/2025-05-12T18:12:53.52-04:00/adconference%20call
+HTTP/1.1 200 OK
+Date: Tue, 13 May 2025 01:30:49 GMT
+Server: WSGIServer/0.2 CPython/3.12.3
+Content-Type: application/json
+X-Frame-Options: DENY
+Content-Length: 2
+X-Content-Type-Options: nosniff
+Referrer-Policy: same-origin
+Cross-Origin-Opener-Policy: same-origin
+Vary: origin
+
+(.virtualenv) ubuntu@stelliccodetest:~/stellic/placeholder/python-django/interview_calendar/api$ curl 0.0.0.0:8000/api/event/I000000000000002 ; echo ""
+[{"name": "adconference call", "start": "2025-05-12T17:12:52.52-04:00", "end": "2025-05-12T18:12:53.52-04:00", "student": null, "instructor": "I000000000000002"}]
+(.virtualenv) ubuntu@stelliccodetest:~/stellic/placeholder/python-django/interview_calendar/api$ curl 0.0.0.0:8000/api/event/S000000000000001 ; echo ""
+[]
+
+
+
+
+but you can't re-add them (they'd technically be overlapping):
+(.virtualenv) ubuntu@stelliccodetest:~/stellic/placeholder/python-django/interview_calendar/api$ curl -I 0.0.0.0:8000/api/event/create/I000000000000002/none/2025-05-12T17:12:52.52-04:00/2025-05-12T18:12:53.52-04:00/adconference%20call
+HTTP/1.1 409 Conflict
+Date: Tue, 13 May 2025 02:07:30 GMT
+Server: WSGIServer/0.2 CPython/3.12.3
+Content-Type: application/json
+X-Frame-Options: DENY
+Content-Length: 2
+X-Content-Type-Options: nosniff
+Referrer-Policy: same-origin
+Cross-Origin-Opener-Policy: same-origin
+Vary: origin
+
+(.virtualenv) ubuntu@stelliccodetest:~/stellic/placeholder/python-django/interview_calendar/api$ curl 0.0.0.0:8000/api/event/I000000000000002 ; echo ""
+[{"name": "adconference call", "start": "2025-05-12T17:12:52.52-04:00", "end": "2025-05-12T18:12:53.52-04:00", "student": null, "instructor": "I000000000000002"}]
+(.virtualenv) ubuntu@stelliccodetest:~/stellic/placeholder/python-django/interview_calendar/api$ curl 0.0.0.0:8000/api/event/S000000000000001 ; echo ""
+[]
+
+
+nor can you add overlapping events for the same singleton person:
+(.virtualenv) ubuntu@stelliccodetest:~/stellic/placeholder/python-django/interview_calendar/api$ curl -I 0.0.0.0:8000/api/event/create/I000000000000002/none/2025-05-12T17:42:52.52-04:00/2025-05-12T18:42:53.52-04:00/adconference%20call
+HTTP/1.1 409 Conflict
+Date: Tue, 13 May 2025 02:08:32 GMT
+Server: WSGIServer/0.2 CPython/3.12.3
+Content-Type: application/json
+X-Frame-Options: DENY
+Content-Length: 2
+X-Content-Type-Options: nosniff
+Referrer-Policy: same-origin
+Cross-Origin-Opener-Policy: same-origin
+Vary: origin
+
+(.virtualenv) ubuntu@stelliccodetest:~/stellic/placeholder/python-django/interview_calendar/api$ curl 0.0.0.0:8000/api/event/I000000000000002 ; echo ""
+[{"name": "adconference call", "start": "2025-05-12T17:12:52.52-04:00", "end": "2025-05-12T18:12:53.52-04:00", "student": null, "instructor": "I000000000000002"}]
+(.virtualenv) ubuntu@stelliccodetest:~/stellic/placeholder/python-django/interview_calendar/api$ curl 0.0.0.0:8000/api/event/S000000000000001 ; echo ""
+[]
+
+
+
+you CAN add events that overlap if they are created independently (ie, the student and the instructor can have events at the same time that don't involve each other)::
+(.virtualenv) ubuntu@stelliccodetest:~/stellic/placeholder/python-django/interview_calendar/api$  curl -I 0.0.0.0:8000/api/event/create/none/S000000000000001/2025-05-12T17:42:52.52-04:00/2025-05-12T18:42:53.52-04:00/adconference%20call
+HTTP/1.1 200 OK
+Date: Tue, 13 May 2025 02:10:02 GMT
+Server: WSGIServer/0.2 CPython/3.12.3
+Content-Type: application/json
+X-Frame-Options: DENY
+Content-Length: 2
+X-Content-Type-Options: nosniff
+Referrer-Policy: same-origin
+Cross-Origin-Opener-Policy: same-origin
+Vary: origin
+
+(.virtualenv) ubuntu@stelliccodetest:~/stellic/placeholder/python-django/interview_calendar/api$ curl 0.0.0.0:8000/api/event/I000000000000002 ; echo ""
+[{"name": "adconference call", "start": "2025-05-12T17:12:52.52-04:00", "end": "2025-05-12T18:12:53.52-04:00", "student": null, "instructor": "I000000000000002"}]
+(.virtualenv) ubuntu@stelliccodetest:~/stellic/placeholder/python-django/interview_calendar/api$ curl 0.0.0.0:8000/api/event/S000000000000001 ; echo ""
+[{"name": "adconference call", "start": "2025-05-12T17:42:52.52-04:00", "end": "2025-05-12T18:42:53.52-04:00", "student": "S000000000000001", "instructor": null}]
+
+
+
+
+
+but again, if you try to re-add it, problems:
+(.virtualenv) ubuntu@stelliccodetest:~/stellic/placeholder/python-django/interview_calendar/api$ curl -I 0.0.0.0:8000/api/event/create/none/S000000000000001/2025-05-12T17:42:52.52-04:00/2025-05-12T18:42:53.52-04:00/adconference%20call
+HTTP/1.1 409 Conflict
+Date: Tue, 13 May 2025 02:11:08 GMT
+Server: WSGIServer/0.2 CPython/3.12.3
+Content-Type: application/json
+X-Frame-Options: DENY
+Content-Length: 2
+X-Content-Type-Options: nosniff
+Referrer-Policy: same-origin
+Cross-Origin-Opener-Policy: same-origin
+Vary: origin
+
+(.virtualenv) ubuntu@stelliccodetest:~/stellic/placeholder/python-django/interview_calendar/api$ curl 0.0.0.0:8000/api/event/I000000000000002 ; echo ""
+[{"name": "adconference call", "start": "2025-05-12T17:12:52.52-04:00", "end": "2025-05-12T18:12:53.52-04:00", "student": null, "instructor": "I000000000000002"}]
+(.virtualenv) ubuntu@stelliccodetest:~/stellic/placeholder/python-django/interview_calendar/api$ curl 0.0.0.0:8000/api/event/S000000000000001 ; echo ""
+[{"name": "adconference call", "start": "2025-05-12T17:42:52.52-04:00", "end": "2025-05-12T18:42:53.52-04:00", "student": "S000000000000001", "instructor": null}]
+
+
+
+lastly, if you want to create a jointly attended event:
+(.virtualenv) ubuntu@stelliccodetest:~/stellic/placeholder/python-django/interview_calendar/api$ curl -I 0.0.0.0:8000/api/event/create/I000000000000002/S000000000000001/2025-05-12T12:42:52.52-04:00/2025-05-12T13:42:53.52-04:00/adconference%20call
+HTTP/1.1 200 OK
+Date: Tue, 13 May 2025 02:12:33 GMT
+Server: WSGIServer/0.2 CPython/3.12.3
+Content-Type: application/json
+X-Frame-Options: DENY
+Content-Length: 2
+X-Content-Type-Options: nosniff
+Referrer-Policy: same-origin
+Cross-Origin-Opener-Policy: same-origin
+Vary: origin
+
+(.virtualenv) ubuntu@stelliccodetest:~/stellic/placeholder/python-django/interview_calendar/api$ curl 0.0.0.0:8000/api/event/I000000000000002 ; echo ""
+[{"name": "adconference call", "start": "2025-05-12T17:12:52.52-04:00", "end": "2025-05-12T18:12:53.52-04:00", "student": null, "instructor": "I000000000000002"}, {"name": "adconference call", "start": "2025-05-12T12:42:52.52-04:00", "end": "2025-05-12T13:42:53.52-04:00", "student": "S000000000000001", "instructor": "I000000000000002"}]
+(.virtualenv) ubuntu@stelliccodetest:~/stellic/placeholder/python-django/interview_calendar/api$ curl 0.0.0.0:8000/api/event/S000000000000001 ; echo ""
+[{"name": "adconference call", "start": "2025-05-12T17:42:52.52-04:00", "end": "2025-05-12T18:42:53.52-04:00", "student": "S000000000000001", "instructor": null}, {"name": "adconference call", "start": "2025-05-12T12:42:52.52-04:00", "end": "2025-05-12T13:42:53.52-04:00", "student": "S000000000000001", "instructor": "I000000000000002"}]
+
+
+
